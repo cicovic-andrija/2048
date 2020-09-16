@@ -28,8 +28,10 @@ const (
 )
 
 const (
-	MinSize = 2
-	MaxSize = 5
+	MinSize   = 4
+	MaxSize   = 5
+	MinTarget = 8
+	MaxTarget = 8192
 )
 
 var (
@@ -40,7 +42,21 @@ func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
-// assume p is between 0.0 and 1.0
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// assumes p is [0.0, 1.0]
 func ptrue(p float64) bool {
 	if rng.Float64() < p {
 		return true
@@ -64,7 +80,7 @@ type Game struct {
 	size  int
 }
 
-func NewGame(player string, size int) (*Game, error) {
+func NewGame(player string, size int, target int) (*Game, error) {
 	if player == "" {
 		return nil, fmt.Errorf("player name cannot be nil")
 	}
@@ -72,6 +88,12 @@ func NewGame(player string, size int) (*Game, error) {
 	if size < MinSize || size > MaxSize {
 		return nil, fmt.Errorf("invalid size: %d, allowed range [%d, %d]",
 			size, MinSize, MaxSize)
+	}
+
+	if target < MinTarget || target > MaxTarget || target&(target-1) != 0 {
+		return nil,
+			fmt.Errorf("invalid target: %d, allowed values: 8,16,...,8192",
+				target)
 	}
 
 	board := make([][]int, size)
@@ -82,7 +104,7 @@ func NewGame(player string, size int) (*Game, error) {
 	game := &Game{
 		Player: player,
 		Score:  0,
-		Target: 16,
+		Target: target,
 		board:  board,
 		size:   size,
 	}
@@ -101,19 +123,18 @@ func itoa(i int) string {
 
 func (g *Game) String() string {
 	const (
-		horizontalLine = "+---+---+---+---+---+\n"
+		horizontalLine = "+------+------+------+------+------+"
 	)
 	var str strings.Builder
-	str.WriteString(horizontalLine)
+	str.WriteString(g.Player + ": " + strconv.Itoa(g.Score) + "\n")
+	str.WriteString(horizontalLine + "\n")
 	for _, row := range g.board {
 		str.WriteString("| ")
-		for _, col := range row {
-			str.WriteString(itoa(col) + " | ")
+		for _, blkval := range row {
+			str.WriteString(fmt.Sprintf("%-4s | ", itoa(blkval)))
 		}
-		str.WriteString("\n" + horizontalLine)
+		str.WriteString("\n" + horizontalLine + "\n")
 	}
-	str.WriteString(g.Player + ": " + strconv.Itoa(g.Score) + "\n")
-
 	return str.String()
 }
 
@@ -123,7 +144,7 @@ func (g *Game) spawn(d D) {
 		if free > g.size/2 {
 			factor = 2
 		}
-		return g.size * factor / 5
+		return min(free, 1+min(free, g.size*factor/5))
 	}
 
 	vertfree := func(col int) int {
@@ -152,14 +173,12 @@ func (g *Game) spawn(d D) {
 		if d == Right {
 			col = g.size - 1
 		}
-		q := quota(vertfree(col))
-	spawn_cloop:
-		for {
+		for q := quota(vertfree(col)); q > 0; {
 			for i := 0; i < g.size; i++ {
 				if g.board[i][col] == 0 && ptrue(0.5) {
 					g.board[i][col] = randBlockval()
 					if q--; q == 0 {
-						break spawn_cloop
+						break
 					}
 				}
 			}
@@ -169,14 +188,12 @@ func (g *Game) spawn(d D) {
 		if d == Down {
 			row = g.size - 1
 		}
-		q := quota(horizfree(row))
-	spawn_rloop:
-		for {
+		for q := quota(horizfree(row)); q > 0; {
 			for i := 0; i < g.size; i++ {
 				if g.board[row][i] == 0 && ptrue(0.5) {
 					g.board[row][i] = randBlockval()
 					if q--; q == 0 {
-						break spawn_rloop
+						break
 					}
 				}
 			}
@@ -226,7 +243,6 @@ func (g *Game) calcOutcome() Outcome {
 	return GameOver
 }
 
-// returns score increment
 func (g *Game) pushRight(lblock int, rblock int, fence int, row []int) {
 	if rblock != fence {
 		row[fence], row[rblock] = row[rblock], 0
@@ -391,45 +407,51 @@ func (g *Game) PushDown() Outcome {
 	return g.calcOutcome()
 }
 
-// base text game
 func main() {
-	var outcome Outcome
-	reader := bufio.NewReader(os.Stdin)
+	NewTextGame("Andrija", 5, 2048)
+}
 
-	game, err := NewGame("Andrija", 3)
-	fmt.Println("Got here")
+func NewTextGame(player string, size int, target int) {
+	game, err := NewGame(player, size, target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error in game initialization: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%s", game.String())
 
-mainloop:
-	for {
-		char, _, _ := reader.ReadRune()
+	fmt.Printf("%s", game.String())
+	reader := bufio.NewReader(os.Stdin)
+	outcome := Continue
+	for outcome == Continue {
+		// read a command
+		fmt.Printf("Command: ")
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			continue
+		}
+
+		// execute the command
 		switch char {
-		case 'd':
+		case 'd', 'D':
 			outcome = game.PushRight()
 			fmt.Printf("%s", game.String())
-		case 'a':
+		case 'a', 'A':
 			outcome = game.PushLeft()
 			fmt.Printf("%s", game.String())
-		case 'w':
+		case 'w', 'W':
 			outcome = game.PushUp()
 			fmt.Printf("%s", game.String())
-		case 's':
+		case 's', 'S':
 			outcome = game.PushDown()
 			fmt.Printf("%s", game.String())
-		case 'e':
-			break mainloop
+		case 'e', 'E', 'q', 'Q':
+			outcome = GameOver
 		}
-		if outcome == GameOverWin {
-			fmt.Printf("WIN! Score: %d\n", game.Score)
-			break mainloop
-		} else if outcome == GameOver {
-			fmt.Printf("GAME OVER!\n")
-			break mainloop
-		}
-		// Continue
+	}
+
+	if outcome == GameOverWin {
+		fmt.Printf("%s WINS! Score: %d\n", game.Player, game.Score)
+	} else {
+		fmt.Printf("GAME OVER!\n")
 	}
 }
