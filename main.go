@@ -11,15 +11,6 @@ import (
 	"time"
 )
 
-type D int
-
-const (
-	Left D = iota
-	Right
-	Up
-	Down
-)
-
 type Outcome int
 
 const (
@@ -30,9 +21,11 @@ const (
 
 const (
 	MinSize   = 4
-	MaxSize   = 5
-	MinTarget = 8
+	MaxSize   = 6
+	MinTarget = 2048
 	MaxTarget = 8192
+
+	blockFourProbability float64 = 0.15
 )
 
 var (
@@ -64,7 +57,7 @@ func ptrue(p float64) bool {
 }
 
 func randBlockval() int {
-	if ptrue(0.25) {
+	if ptrue(blockFourProbability) {
 		return 4
 	}
 	return 2
@@ -77,12 +70,13 @@ func buildTextiParts(playerName string, boardSize int) {
 }
 
 type Game struct {
-	Player string
-	Score  int
-	Target int
+	Player string // player's name
+	Score  int    // player's score
+	Target int    // end-game block
+	Size   int    // size of the board
 
-	board [][]int
-	size  int
+	board    [][]int // matrix of Size x Size cells
+	blockCnt int     // number of free cells
 }
 
 func NewGame(player string, size int, target int) (*Game, error) {
@@ -97,7 +91,7 @@ func NewGame(player string, size int, target int) (*Game, error) {
 
 	if target < MinTarget || target > MaxTarget || target&(target-1) != 0 {
 		return nil,
-			fmt.Errorf("invalid target: %d, allowed values: 8,16,...,8192",
+			fmt.Errorf("invalid target: %d, allowed values: 2048,4096,8192",
 				target)
 	}
 
@@ -111,11 +105,13 @@ func NewGame(player string, size int, target int) (*Game, error) {
 		Score:  0,
 		Target: target,
 
-		board: board,
-		size:  size,
+		Size:     size,
+		board:    board,
+		blockCnt: 0,
 	}
 
-	game.spawn(Left)
+	game.spawn()
+	game.spawn()
 
 	return game, nil
 }
@@ -142,62 +138,21 @@ func (g *Game) String() string {
 	return str.String()
 }
 
-func (g *Game) spawn(d D) {
-	quota := func(free int) int {
-		factor := 1
-		if free > g.size/2 {
-			factor = 2
-		}
-		return min(free, 1+min(free, g.size*factor/5))
-	}
-
-	vfreeCnt := func(col int) (c int) {
-		for i := 0; i < g.size; i++ {
-			if g.board[i][col] == 0 {
-				c++
-			}
-		}
+func (g *Game) spawn() {
+	if g.blockCnt == g.Size*g.Size {
 		return
 	}
 
-	hfreeCnt := func(row int) (c int) {
-		for _, blkval := range g.board[row] {
-			if blkval == 0 {
-				c++
-			}
+	for {
+		n := rng.Intn(g.Size * g.Size)
+		i, j := n/g.Size, n%g.Size
+		if g.board[i][j] == 0 {
+			g.board[i][j] = randBlockval()
+			break
 		}
-		return
 	}
 
-	fd := 0 // fixed dimension (row or col)
-	if d == Right || d == Down {
-		fd = g.size - 1
-	}
-
-	switch d {
-	case Left, Right:
-		for q := quota(vfreeCnt(fd)); q > 0; {
-			for i := 0; i < g.size; i++ {
-				if g.board[i][fd] == 0 && ptrue(0.5) {
-					g.board[i][fd] = randBlockval()
-					if q--; q == 0 {
-						break
-					}
-				}
-			}
-		}
-	case Up, Down:
-		for q := quota(hfreeCnt(fd)); q > 0; {
-			for i := 0; i < g.size; i++ {
-				if g.board[fd][i] == 0 && ptrue(0.5) {
-					g.board[fd][i] = randBlockval()
-					if q--; q == 0 {
-						break
-					}
-				}
-			}
-		}
-	}
+	g.blockCnt++
 }
 
 func (g *Game) canMergeAnyNeighbor(i int, j int, blkval int) bool {
@@ -206,7 +161,7 @@ func (g *Game) canMergeAnyNeighbor(i int, j int, blkval int) bool {
 		return true
 	}
 	// right neighbor
-	if j < g.size-1 && g.board[i][j+1] == blkval {
+	if j < g.Size-1 && g.board[i][j+1] == blkval {
 		return true
 	}
 	// up neighbor
@@ -214,7 +169,7 @@ func (g *Game) canMergeAnyNeighbor(i int, j int, blkval int) bool {
 		return true
 	}
 	// down neighbor
-	if i < g.size-1 && g.board[i+1][j] == blkval {
+	if i < g.Size-1 && g.board[i+1][j] == blkval {
 		return true
 	}
 
@@ -256,6 +211,7 @@ func (g *Game) pushRight(lblock int, rblock int, fence int, row []int) {
 		row[fence] <<= 1
 		row[lblock] = 0
 		g.Score += row[fence]
+		g.blockCnt--
 		return
 	}
 	if lblock != fence-1 {
@@ -265,7 +221,7 @@ func (g *Game) pushRight(lblock int, rblock int, fence int, row []int) {
 
 func (g *Game) PushRight() Outcome {
 	for _, row := range g.board {
-		fence := g.size - 1
+		fence := g.Size - 1
 		for fence > 0 {
 			rblock := fence
 			for rblock > 1 && row[rblock] == 0 {
@@ -280,7 +236,7 @@ func (g *Game) PushRight() Outcome {
 		}
 	}
 
-	g.spawn(Left)
+	g.spawn()
 	return g.calcOutcome()
 }
 
@@ -297,6 +253,7 @@ func (g *Game) pushLeft(lblock int, rblock int, fence int, row []int) {
 		row[fence] <<= 1
 		row[rblock] = 0
 		g.Score += row[fence]
+		g.blockCnt--
 		return
 	}
 	if rblock != fence+1 {
@@ -307,13 +264,13 @@ func (g *Game) pushLeft(lblock int, rblock int, fence int, row []int) {
 func (g *Game) PushLeft() Outcome {
 	for _, row := range g.board {
 		fence := 0
-		for fence < g.size-1 {
+		for fence < g.Size-1 {
 			lblock := fence
-			for lblock < g.size-2 && row[lblock] == 0 {
+			for lblock < g.Size-2 && row[lblock] == 0 {
 				lblock++
 			}
 			rblock := lblock + 1
-			for rblock < g.size-1 && row[rblock] == 0 {
+			for rblock < g.Size-1 && row[rblock] == 0 {
 				rblock++
 			}
 			g.pushLeft(lblock, rblock, fence, row)
@@ -321,7 +278,7 @@ func (g *Game) PushLeft() Outcome {
 		}
 	}
 
-	g.spawn(Right)
+	g.spawn()
 	return g.calcOutcome()
 }
 
@@ -338,6 +295,7 @@ func (g *Game) pushUp(ublock int, dblock int, fence int, col int) {
 		g.board[fence][col] <<= 1
 		g.board[dblock][col] = 0
 		g.Score += g.board[fence][col]
+		g.blockCnt--
 		return
 	}
 	if dblock != fence+1 {
@@ -346,15 +304,15 @@ func (g *Game) pushUp(ublock int, dblock int, fence int, col int) {
 }
 
 func (g *Game) PushUp() Outcome {
-	for col := 0; col < g.size; col++ {
+	for col := 0; col < g.Size; col++ {
 		fence := 0
-		for fence < g.size-1 {
+		for fence < g.Size-1 {
 			ublock := fence
-			for ublock < g.size-2 && g.board[ublock][col] == 0 {
+			for ublock < g.Size-2 && g.board[ublock][col] == 0 {
 				ublock++
 			}
 			dblock := ublock + 1
-			for dblock < g.size-1 && g.board[dblock][col] == 0 {
+			for dblock < g.Size-1 && g.board[dblock][col] == 0 {
 				dblock++
 			}
 			g.pushUp(ublock, dblock, fence, col)
@@ -362,7 +320,7 @@ func (g *Game) PushUp() Outcome {
 		}
 	}
 
-	g.spawn(Down)
+	g.spawn()
 	return g.calcOutcome()
 }
 
@@ -379,6 +337,7 @@ func (g *Game) pushDown(ublock int, dblock int, fence int, col int) {
 		g.board[fence][col] <<= 1
 		g.board[ublock][col] = 0
 		g.Score += g.board[fence][col]
+		g.blockCnt--
 		return
 	}
 	if ublock != fence-1 {
@@ -387,8 +346,8 @@ func (g *Game) pushDown(ublock int, dblock int, fence int, col int) {
 }
 
 func (g *Game) PushDown() Outcome {
-	for col := 0; col < g.size; col++ {
-		fence := g.size - 1
+	for col := 0; col < g.Size; col++ {
+		fence := g.Size - 1
 		for fence > 0 {
 			dblock := fence
 			for dblock > 1 && g.board[dblock][col] == 0 {
@@ -403,7 +362,7 @@ func (g *Game) PushDown() Outcome {
 		}
 	}
 
-	g.spawn(Up)
+	g.spawn()
 	return g.calcOutcome()
 }
 
@@ -415,8 +374,8 @@ var (
 )
 
 func init() {
-	flag.IntVar(&size, "size", 4, "Board size")
-	flag.IntVar(&target, "target", 2048, "End-game block value")
+	flag.IntVar(&size, "size", 4, "Board size: 4 (classic), 5 or 6")
+	flag.IntVar(&target, "target", 2048, "End-game block: 2048, 4096 or 8192")
 	flag.BoolVar(&texti, "t", true, "Text interface")
 	flag.StringVar(&player, "player", "Player", "Player's name")
 
