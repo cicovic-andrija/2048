@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"math/rand"
 	"os"
@@ -35,12 +36,10 @@ const (
 )
 
 var (
-	rng *rand.Rand
+	rng               *rand.Rand
+	textiHorizLine    string
+	textiScoreLineFmt string
 )
-
-func init() {
-	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
-}
 
 func min(a int, b int) int {
 	if a < b {
@@ -71,6 +70,12 @@ func randBlockval() int {
 	return 2
 }
 
+// assumes board size is in limits
+func buildTextiParts(playerName string, boardSize int) {
+	textiHorizLine = "\n+" + strings.Repeat("------+", boardSize) + "\n"
+	textiScoreLineFmt = playerName + "'s score: %d"
+}
+
 type Game struct {
 	Player string
 	Score  int
@@ -82,7 +87,7 @@ type Game struct {
 
 func NewGame(player string, size int, target int) (*Game, error) {
 	if player == "" {
-		return nil, fmt.Errorf("player name cannot be nil")
+		return nil, fmt.Errorf("player name cannot be empty")
 	}
 
 	if size < MinSize || size > MaxSize {
@@ -105,8 +110,9 @@ func NewGame(player string, size int, target int) (*Game, error) {
 		Player: player,
 		Score:  0,
 		Target: target,
-		board:  board,
-		size:   size,
+
+		board: board,
+		size:  size,
 	}
 
 	game.spawn(Left)
@@ -114,27 +120,25 @@ func NewGame(player string, size int, target int) (*Game, error) {
 	return game, nil
 }
 
-func itoa(i int) string {
-	if i == 0 {
-		return " "
-	}
-	return strconv.Itoa(i)
-}
-
 func (g *Game) String() string {
-	const (
-		horizontalLine = "+------+------+------+------+------+"
-	)
-	var str strings.Builder
-	str.WriteString(g.Player + ": " + strconv.Itoa(g.Score) + "\n")
-	str.WriteString(horizontalLine + "\n")
-	for _, row := range g.board {
-		str.WriteString("| ")
-		for _, blkval := range row {
-			str.WriteString(fmt.Sprintf("%-4s | ", itoa(blkval)))
+	tostring := func(i int) string {
+		if i == 0 {
+			return " "
 		}
-		str.WriteString("\n" + horizontalLine + "\n")
+		return strconv.Itoa(i)
 	}
+
+	var str strings.Builder
+
+	str.WriteString(fmt.Sprintf(textiScoreLineFmt, g.Score))
+	str.WriteString(textiHorizLine)
+	for _, row := range g.board {
+		for _, blkval := range row {
+			str.WriteString(fmt.Sprintf("| %-4s ", tostring(blkval)))
+		}
+		str.WriteString("|" + textiHorizLine)
+	}
+
 	return str.String()
 }
 
@@ -147,36 +151,35 @@ func (g *Game) spawn(d D) {
 		return min(free, 1+min(free, g.size*factor/5))
 	}
 
-	vertfree := func(col int) int {
-		c := 0
+	vfreeCnt := func(col int) (c int) {
 		for i := 0; i < g.size; i++ {
 			if g.board[i][col] == 0 {
 				c++
 			}
 		}
-		return c
+		return
 	}
 
-	horizfree := func(row int) int {
-		c := 0
+	hfreeCnt := func(row int) (c int) {
 		for _, blkval := range g.board[row] {
 			if blkval == 0 {
 				c++
 			}
 		}
-		return c
+		return
+	}
+
+	fd := 0 // fixed dimension (row or col)
+	if d == Right || d == Down {
+		fd = g.size - 1
 	}
 
 	switch d {
 	case Left, Right:
-		col := 0
-		if d == Right {
-			col = g.size - 1
-		}
-		for q := quota(vertfree(col)); q > 0; {
+		for q := quota(vfreeCnt(fd)); q > 0; {
 			for i := 0; i < g.size; i++ {
-				if g.board[i][col] == 0 && ptrue(0.5) {
-					g.board[i][col] = randBlockval()
+				if g.board[i][fd] == 0 && ptrue(0.5) {
+					g.board[i][fd] = randBlockval()
 					if q--; q == 0 {
 						break
 					}
@@ -184,14 +187,10 @@ func (g *Game) spawn(d D) {
 			}
 		}
 	case Up, Down:
-		row := 0
-		if d == Down {
-			row = g.size - 1
-		}
-		for q := quota(horizfree(row)); q > 0; {
+		for q := quota(hfreeCnt(fd)); q > 0; {
 			for i := 0; i < g.size; i++ {
-				if g.board[row][i] == 0 && ptrue(0.5) {
-					g.board[row][i] = randBlockval()
+				if g.board[fd][i] == 0 && ptrue(0.5) {
+					g.board[fd][i] = randBlockval()
 					if q--; q == 0 {
 						break
 					}
@@ -201,8 +200,7 @@ func (g *Game) spawn(d D) {
 	}
 }
 
-func (g *Game) canMergeAnyNeighbor(i int, j int) bool {
-	blkval := g.board[i][j]
+func (g *Game) canMergeAnyNeighbor(i int, j int, blkval int) bool {
 	// left neighbor
 	if j > 0 && g.board[i][j-1] == blkval {
 		return true
@@ -231,7 +229,9 @@ func (g *Game) calcOutcome() Outcome {
 			if blkval == g.Target {
 				return GameOverWin
 			}
-			if !canContinue && (blkval == 0 || g.canMergeAnyNeighbor(i, j)) {
+			if !canContinue &&
+				(blkval == 0 || g.canMergeAnyNeighbor(i, j, blkval)) {
+
 				canContinue = true
 			}
 		}
@@ -407,23 +407,46 @@ func (g *Game) PushDown() Outcome {
 	return g.calcOutcome()
 }
 
-func main() {
-	NewTextGame("Andrija", 5, 2048)
+var (
+	texti  bool   // text interface
+	player string // player name
+	size   int    // board size
+	target int    // target
+)
+
+func init() {
+	flag.IntVar(&size, "size", 4, "Board size")
+	flag.IntVar(&target, "target", 2048, "End-game block value")
+	flag.BoolVar(&texti, "t", true, "Text interface")
+	flag.StringVar(&player, "player", "Player", "Player's name")
+
+	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
-func NewTextGame(player string, size int, target int) {
+func main() {
+	flag.Parse()
+	if texti {
+		TextGame(player, size, target)
+		os.Exit(0)
+	}
+}
+
+func TextGame(player string, size int, target int) {
 	game, err := NewGame(player, size, target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error in game initialization: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("%s", game.String())
+	buildTextiParts(player, size)
+
 	reader := bufio.NewReader(os.Stdin)
 	outcome := Continue
+
+	fmt.Println("Controls: 'w' (Up), 'a' (Left), 'd' (Right), 's' (Down), 'q' (Quit)")
+	fmt.Print(game.String())
 	for outcome == Continue {
 		// read a command
-		fmt.Printf("Command: ")
 		char, _, err := reader.ReadRune()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -432,16 +455,16 @@ func NewTextGame(player string, size int, target int) {
 
 		// execute the command
 		switch char {
-		case 'd', 'D':
+		case 'd', 'D', 'l', 'L':
 			outcome = game.PushRight()
 			fmt.Printf("%s", game.String())
-		case 'a', 'A':
+		case 'a', 'A', 'h', 'H':
 			outcome = game.PushLeft()
 			fmt.Printf("%s", game.String())
-		case 'w', 'W':
+		case 'w', 'W', 'k', 'K':
 			outcome = game.PushUp()
 			fmt.Printf("%s", game.String())
-		case 's', 'S':
+		case 's', 'S', 'j', 'J':
 			outcome = game.PushDown()
 			fmt.Printf("%s", game.String())
 		case 'e', 'E', 'q', 'Q':
@@ -450,8 +473,8 @@ func NewTextGame(player string, size int, target int) {
 	}
 
 	if outcome == GameOverWin {
-		fmt.Printf("%s WINS! Score: %d\n", game.Player, game.Score)
+		fmt.Printf("\n%s WINS!\nScore: %d\n", game.Player, game.Score)
 	} else {
-		fmt.Printf("GAME OVER!\n")
+		fmt.Printf("\nScore: 0\nGAME OVER!\n")
 	}
 }
