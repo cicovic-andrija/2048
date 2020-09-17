@@ -1,2 +1,6 @@
+# Vim swap files
 *.swp
 *.swo
+
+# Directory with binaries
+bin/
