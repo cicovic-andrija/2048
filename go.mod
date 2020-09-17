@@ -1,5 +1,3 @@
-module github.com/cicovic-andrija/2048
+module github.com/cicovic-andrija/term2048
 
 go 1.14
-
-require github.com/gdamore/tcell v1.4.0

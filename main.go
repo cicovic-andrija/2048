@@ -75,8 +75,9 @@ type Game struct {
 	Target int    // end-game block
 	Size   int    // size of the board
 
-	board    [][]int // matrix of Size x Size cells
-	blockCnt int     // number of free cells
+	board         [][]int // matrix of Size x Size cells
+	blockCnt      int     // number of free cells
+	anyBlockMoved bool    // any block moved in the current turn?
 }
 
 func NewGame(player string, size int, target int) (*Game, error) {
@@ -101,13 +102,13 @@ func NewGame(player string, size int, target int) (*Game, error) {
 	}
 
 	game := &Game{
-		Player: player,
-		Score:  0,
-		Target: target,
-
-		Size:     size,
-		board:    board,
-		blockCnt: 0,
+		Player:        player,
+		Score:         0,
+		Target:        target,
+		Size:          size,
+		board:         board,
+		blockCnt:      0,
+		anyBlockMoved: false,
 	}
 
 	game.spawn()
@@ -198,24 +199,33 @@ func (g *Game) calcOutcome() Outcome {
 	return GameOver
 }
 
-func (g *Game) pushRight(lblock int, rblock int, fence int, row []int) {
-	if rblock != fence {
-		row[fence], row[rblock] = row[rblock], 0
+func (g *Game) pushRight(lcell int, rcell int, fence int, row []int) {
+	if rcell != fence && row[rcell] != 0 {
+		row[fence], row[rcell] = row[rcell], 0
+		g.anyBlockMoved = true
 	}
-	if row[fence] == 0 || row[lblock] == 0 {
-		row[fence] += row[lblock]
-		row[lblock] = 0
+
+	if row[fence] == 0 || row[lcell] == 0 {
+		if row[lcell] != 0 {
+			g.anyBlockMoved = true
+		}
+		row[fence] += row[lcell]
+		row[lcell] = 0
 		return
 	}
-	if row[fence] == row[lblock] {
+
+	if row[fence] == row[lcell] {
 		row[fence] <<= 1
-		row[lblock] = 0
+		row[lcell] = 0
 		g.Score += row[fence]
 		g.blockCnt--
+		g.anyBlockMoved = true
 		return
 	}
-	if lblock != fence-1 {
-		row[fence-1], row[lblock] = row[lblock], 0
+
+	if lcell != fence-1 {
+		row[fence-1], row[lcell] = row[lcell], 0
+		g.anyBlockMoved = true
 	}
 }
 
@@ -223,41 +233,54 @@ func (g *Game) PushRight() Outcome {
 	for _, row := range g.board {
 		fence := g.Size - 1
 		for fence > 0 {
-			rblock := fence
-			for rblock > 1 && row[rblock] == 0 {
-				rblock--
+			rcell := fence
+			for rcell > 1 && row[rcell] == 0 {
+				rcell--
 			}
-			lblock := rblock - 1
-			for lblock > 0 && row[lblock] == 0 {
-				lblock--
+			lcell := rcell - 1
+			for lcell > 0 && row[lcell] == 0 {
+				lcell--
 			}
-			g.pushRight(lblock, rblock, fence, row)
+			g.pushRight(lcell, rcell, fence, row)
 			fence--
 		}
 	}
 
-	g.spawn()
+	if g.anyBlockMoved {
+		g.spawn()
+	}
+	g.anyBlockMoved = false
+
 	return g.calcOutcome()
 }
 
-func (g *Game) pushLeft(lblock int, rblock int, fence int, row []int) {
-	if lblock != fence {
-		row[fence], row[lblock] = row[lblock], 0
+func (g *Game) pushLeft(lcell int, rcell int, fence int, row []int) {
+	if lcell != fence && row[lcell] != 0 {
+		row[fence], row[lcell] = row[lcell], 0
+		g.anyBlockMoved = true
 	}
-	if row[fence] == 0 || row[rblock] == 0 {
-		row[fence] += row[rblock]
-		row[rblock] = 0
+
+	if row[fence] == 0 || row[rcell] == 0 {
+		if row[rcell] != 0 {
+			g.anyBlockMoved = true
+		}
+		row[fence] += row[rcell]
+		row[rcell] = 0
 		return
 	}
-	if row[fence] == row[rblock] {
+
+	if row[fence] == row[rcell] {
 		row[fence] <<= 1
-		row[rblock] = 0
+		row[rcell] = 0
 		g.Score += row[fence]
 		g.blockCnt--
+		g.anyBlockMoved = true
 		return
 	}
-	if rblock != fence+1 {
-		row[fence+1], row[rblock] = row[rblock], 0
+
+	if rcell != fence+1 {
+		row[fence+1], row[rcell] = row[rcell], 0
+		g.anyBlockMoved = true
 	}
 }
 
@@ -265,41 +288,54 @@ func (g *Game) PushLeft() Outcome {
 	for _, row := range g.board {
 		fence := 0
 		for fence < g.Size-1 {
-			lblock := fence
-			for lblock < g.Size-2 && row[lblock] == 0 {
-				lblock++
+			lcell := fence
+			for lcell < g.Size-2 && row[lcell] == 0 {
+				lcell++
 			}
-			rblock := lblock + 1
-			for rblock < g.Size-1 && row[rblock] == 0 {
-				rblock++
+			rcell := lcell + 1
+			for rcell < g.Size-1 && row[rcell] == 0 {
+				rcell++
 			}
-			g.pushLeft(lblock, rblock, fence, row)
+			g.pushLeft(lcell, rcell, fence, row)
 			fence++
 		}
 	}
 
-	g.spawn()
+	if g.anyBlockMoved {
+		g.spawn()
+	}
+	g.anyBlockMoved = false
+
 	return g.calcOutcome()
 }
 
-func (g *Game) pushUp(ublock int, dblock int, fence int, col int) {
-	if ublock != fence {
-		g.board[fence][col], g.board[ublock][col] = g.board[ublock][col], 0
+func (g *Game) pushUp(ucell int, dcell int, fence int, col int) {
+	if ucell != fence && g.board[ucell][col] != 0 {
+		g.board[fence][col], g.board[ucell][col] = g.board[ucell][col], 0
+		g.anyBlockMoved = true
 	}
-	if g.board[fence][col] == 0 || g.board[dblock][col] == 0 {
-		g.board[fence][col] += g.board[dblock][col]
-		g.board[dblock][col] = 0
+
+	if g.board[fence][col] == 0 || g.board[dcell][col] == 0 {
+		if g.board[dcell][col] != 0 {
+			g.anyBlockMoved = true
+		}
+		g.board[fence][col] += g.board[dcell][col]
+		g.board[dcell][col] = 0
 		return
 	}
-	if g.board[fence][col] == g.board[dblock][col] {
+
+	if g.board[fence][col] == g.board[dcell][col] {
 		g.board[fence][col] <<= 1
-		g.board[dblock][col] = 0
+		g.board[dcell][col] = 0
 		g.Score += g.board[fence][col]
 		g.blockCnt--
+		g.anyBlockMoved = true
 		return
 	}
-	if dblock != fence+1 {
-		g.board[fence+1][col], g.board[dblock][col] = g.board[dblock][col], 0
+
+	if dcell != fence+1 {
+		g.board[fence+1][col], g.board[dcell][col] = g.board[dcell][col], 0
+		g.anyBlockMoved = true
 	}
 }
 
@@ -307,41 +343,54 @@ func (g *Game) PushUp() Outcome {
 	for col := 0; col < g.Size; col++ {
 		fence := 0
 		for fence < g.Size-1 {
-			ublock := fence
-			for ublock < g.Size-2 && g.board[ublock][col] == 0 {
-				ublock++
+			ucell := fence
+			for ucell < g.Size-2 && g.board[ucell][col] == 0 {
+				ucell++
 			}
-			dblock := ublock + 1
-			for dblock < g.Size-1 && g.board[dblock][col] == 0 {
-				dblock++
+			dcell := ucell + 1
+			for dcell < g.Size-1 && g.board[dcell][col] == 0 {
+				dcell++
 			}
-			g.pushUp(ublock, dblock, fence, col)
+			g.pushUp(ucell, dcell, fence, col)
 			fence++
 		}
 	}
 
-	g.spawn()
+	if g.anyBlockMoved {
+		g.spawn()
+	}
+	g.anyBlockMoved = false
+
 	return g.calcOutcome()
 }
 
-func (g *Game) pushDown(ublock int, dblock int, fence int, col int) {
-	if dblock != fence {
-		g.board[fence][col], g.board[dblock][col] = g.board[dblock][col], 0
+func (g *Game) pushDown(ucell int, dcell int, fence int, col int) {
+	if dcell != fence && g.board[dcell][col] != 0 {
+		g.board[fence][col], g.board[dcell][col] = g.board[dcell][col], 0
+		g.anyBlockMoved = true
 	}
-	if g.board[fence][col] == 0 || g.board[ublock][col] == 0 {
-		g.board[fence][col] += g.board[ublock][col]
-		g.board[ublock][col] = 0
+
+	if g.board[fence][col] == 0 || g.board[ucell][col] == 0 {
+		if g.board[ucell][col] != 0 {
+			g.anyBlockMoved = true
+		}
+		g.board[fence][col] += g.board[ucell][col]
+		g.board[ucell][col] = 0
 		return
 	}
-	if g.board[fence][col] == g.board[ublock][col] {
+
+	if g.board[fence][col] == g.board[ucell][col] {
 		g.board[fence][col] <<= 1
-		g.board[ublock][col] = 0
+		g.board[ucell][col] = 0
 		g.Score += g.board[fence][col]
 		g.blockCnt--
+		g.anyBlockMoved = true
 		return
 	}
-	if ublock != fence-1 {
-		g.board[fence-1][col], g.board[ublock][col] = g.board[ublock][col], 0
+
+	if ucell != fence-1 {
+		g.board[fence-1][col], g.board[ucell][col] = g.board[ucell][col], 0
+		g.anyBlockMoved = true
 	}
 }
 
@@ -349,20 +398,24 @@ func (g *Game) PushDown() Outcome {
 	for col := 0; col < g.Size; col++ {
 		fence := g.Size - 1
 		for fence > 0 {
-			dblock := fence
-			for dblock > 1 && g.board[dblock][col] == 0 {
-				dblock--
+			dcell := fence
+			for dcell > 1 && g.board[dcell][col] == 0 {
+				dcell--
 			}
-			ublock := dblock - 1
-			for ublock > 0 && g.board[ublock][col] == 0 {
-				ublock--
+			ucell := dcell - 1
+			for ucell > 0 && g.board[ucell][col] == 0 {
+				ucell--
 			}
-			g.pushDown(ublock, dblock, fence, col)
+			g.pushDown(ucell, dcell, fence, col)
 			fence--
 		}
 	}
 
-	g.spawn()
+	if g.anyBlockMoved {
+		g.spawn()
+	}
+	g.anyBlockMoved = false
+
 	return g.calcOutcome()
 }
 
