@@ -53,7 +53,7 @@ func main() {
 	}
 
 	if local && terminterface {
-		termi.NewTerminalGraphicsGame()
+		termi.NewTerminalGraphicsGame(size)
 	}
 
 	if hosted {

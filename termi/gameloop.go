@@ -12,7 +12,7 @@ func errorout(err error) {
 	os.Exit(1)
 }
 
-func NewTerminalGraphicsGame() {
+func NewTerminalGraphicsGame(size int) {
 	s, e := tcell.NewScreen()
 	if e != nil {
 		errorout(e)
@@ -29,14 +29,15 @@ func NewTerminalGraphicsGame() {
 	s.HideCursor()
 	s.DisableMouse()
 
-	testDrawBox(s, 17, 7)
+	board := NewTermBoard(size, 0, 0, s)
+	board.draw()
 
 	// wait for esc
 	for {
 		switch ev := s.PollEvent().(type) {
 		case *tcell.EventResize:
 			s.Sync()
-			testDrawBox(s, 17, 7)
+			board.draw()
 		case *tcell.EventKey:
 			if ev.Key() == tcell.KeyEscape {
 				s.Fini()

@@ -18,23 +18,15 @@ func testDrawNumbers(s tcell.Screen) {
 	s.Show()
 }
 
-func testDraw2048(s tcell.Screen) {
-	bg := tcell.StyleDefault
-	fg := tcell.StyleDefault.Reverse(true)
+func testDrawBoxedNumber(s tcell.Screen) {
+	fg := tcell.StyleDefault
+	bg := tcell.StyleDefault.Reverse(true)
 	s.Clear()
-	drawNumber(2048, 0, 0, s, fg, bg)
-	s.Show()
-}
-
-func testDrawBox(s tcell.Screen, w int, h int) {
-	bg := tcell.StyleDefault
-	fg := tcell.StyleDefault.Reverse(true)
-	s.Clear()
-	for x := 0; x < h; x++ {
-		for y := 0; y < w; y++ {
-			s.SetContent(y, x, ' ', nil, fg)
+	for x := 0; x < blockHeight; x++ {
+		for y := 0; y < blockWidth; y++ {
+			s.SetContent(y, x, ' ', nil, bg)
 		}
 	}
-	drawNumber(2048, 0, 0, s, bg, fg)
+	drawNumber(2048, 0, 0, s, fg)
 	s.Show()
 }

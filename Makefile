@@ -1,7 +1,25 @@
-build:
-	mkdir -p ./bin
-	go build -o ./bin/2048 -v ./cmd
-	cp ./bin/2048 ~/bin/2048
+# Makefile for 2048
+#
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GOCLEAN=$(GOCMD) clean
+BINFNAME=2048
+BINLOCAL=bin
+BINUSER=$(HOME)/bin
 
+.PHONY: install
+install: build
+	cp $(BINLOCAL)/$(BINFNAME) $(BINUSER)/$(BINFNAME)
+
+.PHONY: build
+build: prebuild
+	$(GOBUILD) -o $(BINLOCAL)/$(BINFNAME) -v ./cmd
+
+.PHONY: prebuild
+prebuild:
+	mkdir -p $(BINLOCAL)
+
+.PHONY: clean
 clean:
-	rm -rf ./bin/
+	$(GOCLEAN)
+	rm -rf $(BINLOCAL)

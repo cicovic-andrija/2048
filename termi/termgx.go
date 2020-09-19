@@ -19,17 +19,23 @@ var bitmap = map[int]uint16{
 
 // assumes n > 0
 // ignore return value, it is used internally
-func drawNumber(n int, tlx int, tly int, s tcell.Screen, fg tcell.Style, bg tcell.Style) int {
+func drawNumber(n int, tlx int, tly int, s tcell.Screen, st tcell.Style) int {
 	if n/10 > 0 {
-		tly = drawNumber(n/10, tlx, tly, s, fg, bg) + digitFieldWidth - 1
+		tly = drawNumber(n/10, tlx, tly, s, st) + digitFieldWidth - 1
 	}
 	digit := n % 10
 	for i := 0; i < 16; i++ {
 		if bitmap[digit]&(1<<i) != 0 {
-			s.SetContent(tly+i%3+1, tlx+i/3+1, ' ', nil, fg)
-		} else {
-			s.SetContent(tly+i%3+1, tlx+i/3+1, ' ', nil, bg)
+			s.SetContent(tly+i%3+1, tlx+i/3+1, ' ', nil, st)
 		}
 	}
 	return tly
+}
+
+func drawRect(w int, h int, tlx int, tly int, s tcell.Screen, st tcell.Style) {
+	for x := 0; x < h; x++ {
+		for y := 0; y < w; y++ {
+			s.SetContent(tly+y, tlx+x, ' ', nil, st)
+		}
+	}
 }
