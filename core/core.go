@@ -14,7 +14,7 @@ import (
 
 const (
 	MinSize = 4
-	MaxSize = 20
+	MaxSize = 5
 
 	MaxBlock       = 8192
 	MaxBlockDigits = 4
@@ -459,7 +459,7 @@ func (g *Game) Score() int {
 	return g.score
 }
 
-func (g *Game) Cell(i int, j int) int {
+func (g *Game) Block(i int, j int) int {
 	if i < 0 || i >= g.Size || j < 0 || j >= g.Size {
 		return -1
 	}

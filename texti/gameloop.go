@@ -34,7 +34,7 @@ func drawBoard(g *core.Game) {
 	str.WriteString(textiHorizLine)
 	for i := 0; i < g.Size; i++ {
 		for j := 0; j < g.Size; j++ {
-			str.WriteString(fmt.Sprintf("| %-4s ", tostring(g.Cell(i, j))))
+			str.WriteString(fmt.Sprintf("| %-4s ", tostring(g.Block(i, j))))
 		}
 		str.WriteString("|" + textiHorizLine)
 	}
