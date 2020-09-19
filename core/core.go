@@ -7,13 +7,31 @@ import (
 	"time"
 )
 
+// Terminology:
+//   cell - a position inside a matrix
+//   block - a value of the cell
+//     - 0 is a special value meaning "no block"
+
 const (
-	MinSize   = 4
-	MaxSize   = 6
+	MinSize = 4
+	MaxSize = 20
+
+	MaxBlock       = 8192
+	MaxBlockDigits = 4
+
 	MinTarget = 2048
-	MaxTarget = 8192
+	MaxTarget = MaxBlock
 
 	blockFourProbability float64 = 0.15
+)
+
+type Direction int
+
+const (
+	Right = iota
+	Left
+	Up
+	Down
 )
 
 type Outcome int
@@ -24,21 +42,56 @@ const (
 	GameOverWin
 )
 
+type stableState struct {
+	board    [][]int // matrix of cells
+	score    int     // player's score
+	blockCnt int     // number of blocks on the board
+}
+
+// assumes size is in limits
+func newInitialState(size int) *stableState {
+	// all cells are initially empty (aka all blocks are 0)
+	board := make([][]int, size)
+	for i := 0; i < size; i++ {
+		board[i] = make([]int, size)
+	}
+
+	return &stableState{
+		board:    board,
+		score:    0,
+		blockCnt: 0,
+	}
+}
+
+// assumes board size of both states are equal, since this
+// function is only used inside the package
+func (s *stableState) deepCopyFrom(other *stableState) {
+	for i, row := range other.board {
+		for j, block := range row {
+			s.board[i][j] = block
+		}
+	}
+	s.score, s.blockCnt = other.score, other.blockCnt
+}
+
 type Game struct {
 	Player string // player's name
-	Score  int    // player's score
 	Target int    // end-game block
 	Size   int    // size of the board
 
-	board         [][]int    // matrix of Size x Size cells
-	blockCnt      int        // number of free cells
-	anyBlockMoved bool       // any block moved in the current turn?
+	stableState                  // embedded current state
+	prevStableState *stableState // previous stable state
+	scratchState    *stableState // scratch state
+
+	canUndo       bool
+	UndosLeft     int
+	anyBlockMoved bool
 	rng           *rand.Rand // random number generator
 }
 
-func NewGame(player string, size int, target int) (*Game, error) {
+func NewGame(player string, size int, target int, undos int) (*Game, error) {
 	// param validation
-
+	//
 	if player == "" {
 		return nil, errors.New("player name cannot be empty")
 	}
@@ -61,22 +114,22 @@ func NewGame(player string, size int, target int) (*Game, error) {
 		return nil, errors.New(errmsg)
 	}
 
-	// create a new game
-
-	board := make([][]int, size)
-	for i := 0; i < size; i++ {
-		board[i] = make([]int, size)
+	if undos < 0 {
+		undos = 0
 	}
 
+	// create a new game
 	game := &Game{
-		Player:        player,
-		Score:         0,
-		Target:        target,
-		Size:          size,
-		board:         board,
-		blockCnt:      0,
-		anyBlockMoved: false,
-		rng:           rand.New(rand.NewSource(time.Now().UnixNano())),
+		Player:          player,
+		Target:          target,
+		Size:            size,
+		stableState:     *newInitialState(size),
+		prevStableState: newInitialState(size),
+		scratchState:    newInitialState(size),
+		canUndo:         false,
+		UndosLeft:       undos,
+		anyBlockMoved:   false,
+		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	// spawn two blocks at the start of the game
@@ -153,7 +206,28 @@ func (g *Game) calcOutcome() Outcome {
 	return GameOver
 }
 
-func (g *Game) pushRight(lcell int, rcell int, fence int, row []int) {
+func (g *Game) copyToPrevState() {
+	if g.UndosLeft == 0 {
+		return
+	}
+	g.prevStableState.deepCopyFrom(&g.stableState)
+}
+
+func (g *Game) rollbackPrevState() {
+	if g.UndosLeft == 0 {
+		return
+	}
+	g.prevStableState.deepCopyFrom(g.scratchState)
+}
+
+func (g *Game) commitPrevState() {
+	if g.UndosLeft == 0 {
+		return
+	}
+	g.scratchState.deepCopyFrom(g.prevStableState)
+}
+
+func (g *Game) _pushRight(lcell int, rcell int, fence int, row []int) {
 	if rcell != fence && row[rcell] != 0 {
 		row[fence], row[rcell] = row[rcell], 0
 		g.anyBlockMoved = true
@@ -171,7 +245,7 @@ func (g *Game) pushRight(lcell int, rcell int, fence int, row []int) {
 	if row[fence] == row[lcell] {
 		row[fence] <<= 1
 		row[lcell] = 0
-		g.Score += row[fence]
+		g.score += row[fence]
 		g.blockCnt--
 		g.anyBlockMoved = true
 		return
@@ -183,7 +257,7 @@ func (g *Game) pushRight(lcell int, rcell int, fence int, row []int) {
 	}
 }
 
-func (g *Game) pushLeft(lcell int, rcell int, fence int, row []int) {
+func (g *Game) _pushLeft(lcell int, rcell int, fence int, row []int) {
 	if lcell != fence && row[lcell] != 0 {
 		row[fence], row[lcell] = row[lcell], 0
 		g.anyBlockMoved = true
@@ -201,7 +275,7 @@ func (g *Game) pushLeft(lcell int, rcell int, fence int, row []int) {
 	if row[fence] == row[rcell] {
 		row[fence] <<= 1
 		row[rcell] = 0
-		g.Score += row[fence]
+		g.score += row[fence]
 		g.blockCnt--
 		g.anyBlockMoved = true
 		return
@@ -213,7 +287,7 @@ func (g *Game) pushLeft(lcell int, rcell int, fence int, row []int) {
 	}
 }
 
-func (g *Game) pushUp(ucell int, dcell int, fence int, col int) {
+func (g *Game) _pushUp(ucell int, dcell int, fence int, col int) {
 	if ucell != fence && g.board[ucell][col] != 0 {
 		g.board[fence][col], g.board[ucell][col] = g.board[ucell][col], 0
 		g.anyBlockMoved = true
@@ -231,7 +305,7 @@ func (g *Game) pushUp(ucell int, dcell int, fence int, col int) {
 	if g.board[fence][col] == g.board[dcell][col] {
 		g.board[fence][col] <<= 1
 		g.board[dcell][col] = 0
-		g.Score += g.board[fence][col]
+		g.score += g.board[fence][col]
 		g.blockCnt--
 		g.anyBlockMoved = true
 		return
@@ -243,7 +317,7 @@ func (g *Game) pushUp(ucell int, dcell int, fence int, col int) {
 	}
 }
 
-func (g *Game) pushDown(ucell int, dcell int, fence int, col int) {
+func (g *Game) _pushDown(ucell int, dcell int, fence int, col int) {
 	if dcell != fence && g.board[dcell][col] != 0 {
 		g.board[fence][col], g.board[dcell][col] = g.board[dcell][col], 0
 		g.anyBlockMoved = true
@@ -261,7 +335,7 @@ func (g *Game) pushDown(ucell int, dcell int, fence int, col int) {
 	if g.board[fence][col] == g.board[ucell][col] {
 		g.board[fence][col] <<= 1
 		g.board[ucell][col] = 0
-		g.Score += g.board[fence][col]
+		g.score += g.board[fence][col]
 		g.blockCnt--
 		g.anyBlockMoved = true
 		return
@@ -273,7 +347,7 @@ func (g *Game) pushDown(ucell int, dcell int, fence int, col int) {
 	}
 }
 
-func (g *Game) PushRight() Outcome {
+func (g *Game) pushRight() {
 	for _, row := range g.board {
 		fence := g.Size - 1
 		for fence > 0 {
@@ -285,20 +359,13 @@ func (g *Game) PushRight() Outcome {
 			for lcell > 0 && row[lcell] == 0 {
 				lcell--
 			}
-			g.pushRight(lcell, rcell, fence, row)
+			g._pushRight(lcell, rcell, fence, row)
 			fence--
 		}
 	}
-
-	if g.anyBlockMoved {
-		g.spawn()
-	}
-	g.anyBlockMoved = false
-
-	return g.calcOutcome()
 }
 
-func (g *Game) PushLeft() Outcome {
+func (g *Game) pushLeft() {
 	for _, row := range g.board {
 		fence := 0
 		for fence < g.Size-1 {
@@ -310,20 +377,13 @@ func (g *Game) PushLeft() Outcome {
 			for rcell < g.Size-1 && row[rcell] == 0 {
 				rcell++
 			}
-			g.pushLeft(lcell, rcell, fence, row)
+			g._pushLeft(lcell, rcell, fence, row)
 			fence++
 		}
 	}
-
-	if g.anyBlockMoved {
-		g.spawn()
-	}
-	g.anyBlockMoved = false
-
-	return g.calcOutcome()
 }
 
-func (g *Game) PushUp() Outcome {
+func (g *Game) pushUp() {
 	for col := 0; col < g.Size; col++ {
 		fence := 0
 		for fence < g.Size-1 {
@@ -335,20 +395,13 @@ func (g *Game) PushUp() Outcome {
 			for dcell < g.Size-1 && g.board[dcell][col] == 0 {
 				dcell++
 			}
-			g.pushUp(ucell, dcell, fence, col)
+			g._pushUp(ucell, dcell, fence, col)
 			fence++
 		}
 	}
-
-	if g.anyBlockMoved {
-		g.spawn()
-	}
-	g.anyBlockMoved = false
-
-	return g.calcOutcome()
 }
 
-func (g *Game) PushDown() Outcome {
+func (g *Game) pushDown() {
 	for col := 0; col < g.Size; col++ {
 		fence := g.Size - 1
 		for fence > 0 {
@@ -360,17 +413,50 @@ func (g *Game) PushDown() Outcome {
 			for ucell > 0 && g.board[ucell][col] == 0 {
 				ucell--
 			}
-			g.pushDown(ucell, dcell, fence, col)
+			g._pushDown(ucell, dcell, fence, col)
 			fence--
 		}
 	}
+}
 
-	if g.anyBlockMoved {
-		g.spawn()
+func (g *Game) Push(dir Direction) Outcome {
+	g.copyToPrevState()
+
+	switch dir {
+	case Right:
+		g.pushRight()
+	case Left:
+		g.pushLeft()
+	case Up:
+		g.pushUp()
+	case Down:
+		g.pushDown()
 	}
-	g.anyBlockMoved = false
 
+	if !g.anyBlockMoved {
+		g.rollbackPrevState()
+		return Continue
+	}
+
+	g.anyBlockMoved = false
+	g.canUndo = true
+	g.spawn()
+	g.commitPrevState()
 	return g.calcOutcome()
+}
+
+func (g *Game) Undo() bool {
+	if g.UndosLeft == 0 || !g.canUndo {
+		return false
+	}
+	g.stableState.deepCopyFrom(g.prevStableState)
+	g.UndosLeft--
+	g.canUndo = false // two consecutive undos are impossible
+	return true
+}
+
+func (g *Game) Score() int {
+	return g.score
 }
 
 func (g *Game) Cell(i int, j int) int {

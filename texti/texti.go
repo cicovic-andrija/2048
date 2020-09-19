@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cicovic-andrija/term2048/core"
+	"github.com/cicovic-andrija/2048/core"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 // assumes board size is in limits
 func buildTextiParts(playerName string, boardSize int) {
 	textiHorizLine = "\n+" + strings.Repeat("------+", boardSize) + "\n"
-	textiScoreLineFmt = playerName + "'s score: %d"
+	textiScoreLineFmt = playerName + "'s score: %d, undos left: %d"
 }
 
 func drawBoard(g *core.Game) {
@@ -30,7 +30,7 @@ func drawBoard(g *core.Game) {
 	}
 
 	var str strings.Builder
-	str.WriteString(fmt.Sprintf(textiScoreLineFmt, g.Score))
+	str.WriteString(fmt.Sprintf(textiScoreLineFmt, g.Score(), g.UndosLeft))
 	str.WriteString(textiHorizLine)
 	for i := 0; i < g.Size; i++ {
 		for j := 0; j < g.Size; j++ {
@@ -42,8 +42,8 @@ func drawBoard(g *core.Game) {
 	fmt.Print(str.String())
 }
 
-func NewTextGame(player string, size int, target int) {
-	game, err := core.NewGame(player, size, target)
+func NewTextGame(player string, size int, target int, undos int) {
+	game, err := core.NewGame(player, size, target, undos)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error in game initialization: %v\n", err)
 		os.Exit(1)
@@ -68,16 +68,22 @@ func NewTextGame(player string, size int, target int) {
 		// execute the command
 		switch char {
 		case 'd', 'D', 'l', 'L':
-			outcome = game.PushRight()
+			outcome = game.Push(core.Right)
 			drawBoard(game)
 		case 'a', 'A', 'h', 'H':
-			outcome = game.PushLeft()
+			outcome = game.Push(core.Left)
 			drawBoard(game)
 		case 'w', 'W', 'k', 'K':
-			outcome = game.PushUp()
+			outcome = game.Push(core.Up)
 			drawBoard(game)
 		case 's', 'S', 'j', 'J':
-			outcome = game.PushDown()
+			outcome = game.Push(core.Down)
+			drawBoard(game)
+		case 'u', 'U':
+			if ok := game.Undo(); !ok {
+				fmt.Printf("Can't undo: no undos left or second undo in a row.\n")
+				break
+			}
 			drawBoard(game)
 		case 'e', 'E', 'q', 'Q':
 			outcome = core.GameOver
@@ -85,7 +91,7 @@ func NewTextGame(player string, size int, target int) {
 	}
 
 	if outcome == core.GameOverWin {
-		fmt.Printf("\n%s WINS!\nScore: %d\n", game.Player, game.Score)
+		fmt.Printf("\n%s WINS!\nScore: %d\n", game.Player, game.Score())
 	} else {
 		fmt.Printf("\nScore: 0\nGAME OVER!\n")
 	}
