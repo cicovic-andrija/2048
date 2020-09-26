@@ -14,8 +14,8 @@ const (
 	verticalBlockGap   = 1
 )
 
-type TermBoard struct {
-	nblocks int // number of blocks in one dimension
+type board struct {
+	game *core.Game
 
 	boardWidth  int
 	boardHeight int
@@ -28,33 +28,42 @@ type TermBoard struct {
 	bg     tcell.Style
 }
 
-// FIXME: assume size is in limits for now
-func NewTermBoard(nblocks int, tlx int, tly int, screen tcell.Screen) *TermBoard {
-	return &TermBoard{
-		nblocks:     nblocks,
-		boardWidth:  nblocks*(blockWidth+horizontalBlockGap) + horizontalBlockGap,
-		boardHeight: nblocks*(blockHeight+verticalBlockGap) + verticalBlockGap,
+func newBoard(game *core.Game, tlx int, tly int, screen tcell.Screen) *board {
+	return &board{
+		game:        game,
+		boardWidth:  game.Size*(blockWidth+horizontalBlockGap) + horizontalBlockGap,
+		boardHeight: game.Size*(blockHeight+verticalBlockGap) + verticalBlockGap,
 		refx:        tlx,
 		refy:        tly,
 		screen:      screen,
-		bg:          tcell.StyleDefault.Background(tcell.ColorGray),
+		bg:          tcell.StyleDefault.Background(colorGray),
 	}
 }
 
-func (b *TermBoard) draw(game *core.Game) {
-	b.screen.Clear()
+func (b *board) redraw() {
 	drawRect(b.boardWidth, b.boardHeight, b.refx, b.refy, b.screen, b.bg)
-	for i := 0; i < b.nblocks; i++ {
-		for j := 0; j < b.nblocks; j++ {
+	for i := 0; i < b.game.Size; i++ {
+		for j := 0; j < b.game.Size; j++ {
 			x := b.refx + verticalBlockGap + i*(blockHeight+verticalBlockGap)
 			y := b.refy + horizontalBlockGap + j*(blockWidth+horizontalBlockGap)
-			drawRect(blockWidth, blockHeight, x, y, b.screen, tcell.StyleDefault)
-			if val := game.Block(i, j); val != 0 {
-				drawNumber(val, x, y+blkPropMap[val].inBlockPad, b.screen, b.bg)
+			if val := b.game.Block(i, j); val != 0 {
+				drawRect(blockWidth, blockHeight, x, y, b.screen, blkPropMap[val].bg)
+				drawNumber(val, x, y+blkPropMap[val].inBlockPad, b.screen, blkPropMap[val].fg)
 			} else {
-				drawRect(blockWidth, blockHeight, x, y, b.screen, tcell.StyleDefault)
+				drawRect(blockWidth, blockHeight, x, y, b.screen, emptyCellStyle)
 			}
 		}
 	}
-	b.screen.Show()
+}
+
+func (b *board) push(dir core.Direction) core.Outcome {
+	outcome := b.game.Push(dir)
+	b.redraw()
+	return outcome
+}
+
+func (b *board) undo() {
+	if b.game.Undo() {
+		b.redraw()
+	}
 }

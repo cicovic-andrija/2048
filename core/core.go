@@ -8,9 +8,9 @@ import (
 )
 
 // Terminology:
-//   cell - a position inside a matrix
+//   cell - a position (i,j) inside a matrix
 //   block - a value of the cell
-//     - 0 is a special value meaning "no block"
+//		0 is a special value meaning "no block"
 
 const (
 	MinSize = 4
@@ -28,7 +28,7 @@ const (
 type Direction int
 
 const (
-	Right = iota
+	Right Direction = iota
 	Left
 	Up
 	Down
@@ -40,6 +40,14 @@ const (
 	Continue Outcome = iota
 	GameOver
 	GameOverWin
+)
+
+type Phase int
+
+const (
+	NotStarted Phase = iota
+	NotFinished
+	Finished
 )
 
 type stableState struct {
@@ -78,6 +86,7 @@ type Game struct {
 	Player string // player's name
 	Target int    // end-game block
 	Size   int    // size of the board
+	Phase  Phase  // game phase
 
 	stableState                  // embedded current state
 	prevStableState *stableState // previous stable state
@@ -123,6 +132,7 @@ func NewGame(player string, size int, target int, undos int) (*Game, error) {
 		Player:          player,
 		Target:          target,
 		Size:            size,
+		Phase:           NotStarted,
 		stableState:     *newInitialState(size),
 		prevStableState: newInitialState(size),
 		scratchState:    newInitialState(size),
@@ -184,12 +194,15 @@ func (g *Game) canMergeAnyNeighbor(i int, j int, blkval int) bool {
 	return false
 }
 
+// note: it is important that this operation be indepotent
+// and that it works in every game phase
 func (g *Game) calcOutcome() Outcome {
 	canContinue := false
 
 	for i, row := range g.board {
 		for j, blkval := range row {
 			if blkval == g.Target {
+				g.Phase = Finished
 				return GameOverWin
 			}
 			if !canContinue &&
@@ -201,8 +214,11 @@ func (g *Game) calcOutcome() Outcome {
 	}
 
 	if canContinue {
+		g.Phase = NotFinished
 		return Continue
 	}
+
+	g.Phase = Finished
 	return GameOver
 }
 
@@ -420,6 +436,10 @@ func (g *Game) pushDown() {
 }
 
 func (g *Game) Push(dir Direction) Outcome {
+	if g.Phase == Finished {
+		return g.calcOutcome()
+	}
+
 	g.copyToPrevState()
 
 	switch dir {
@@ -446,12 +466,12 @@ func (g *Game) Push(dir Direction) Outcome {
 }
 
 func (g *Game) Undo() bool {
-	if g.UndosLeft == 0 || !g.canUndo {
+	if g.Phase == Finished || g.UndosLeft == 0 || !g.canUndo {
 		return false
 	}
 	g.stableState.deepCopyFrom(g.prevStableState)
 	g.UndosLeft--
-	g.canUndo = false // two consecutive undos are impossible
+	g.canUndo = false // two consecutive undos are not allowed
 	return true
 }
 

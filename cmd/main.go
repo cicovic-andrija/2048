@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	// used in main
+	// used in this package
 	local         bool // local game
 	hosted        bool // hosted game
 	textinterface bool // text interface
 	terminterface bool // terminal interface
 
-	// passed and validated later in other packages
+	// passed to and validated later in other packages
 	player string // player name
 	size   int    // board size
 	target int    // end-game block
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	if local && terminterface {
-		termi.NewTerminalGraphicsGame(size)
+		termi.NewTerminalGraphicsGame(player, size, target, undos)
 	}
 
 	if hosted {
