@@ -5,10 +5,10 @@ import (
 )
 
 const (
-	colorAlmostWhite = tcell.Color254
-	colorLightGray   = tcell.Color250
-	colorGray        = tcell.Color246
-	colorDarkGray    = tcell.Color242
+	colorEggShellWhite = tcell.Color254
+	colorLightGray     = tcell.Color250
+	colorGray          = tcell.Color246
+	colorDarkGray      = tcell.Color242
 )
 
 var (
@@ -27,9 +27,18 @@ var (
 
 	emptyCellStyle = tcell.StyleDefault.
 			Background(colorLightGray)
+
 	whiteOnBlackDefault = tcell.StyleDefault.
 				Background(tcell.ColorBlack).
 				Foreground(tcell.ColorWhite)
+
+	whiteOnGreen = tcell.StyleDefault.
+			Background(tcell.ColorGreen).
+			Foreground(tcell.ColorWhite)
+
+	whiteOnRed = tcell.StyleDefault.
+			Background(tcell.ColorRed).
+			Foreground(tcell.ColorWhite)
 )
 
 // assumes n > 0

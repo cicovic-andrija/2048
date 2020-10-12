@@ -18,6 +18,26 @@ func testDrawNumbers(s tcell.Screen) {
 	s.Show()
 }
 
+func testDrawBlocks(s tcell.Screen) {
+	s.Clear()
+	ax, ay := 0, 0
+	for n := 2; n <= 8192; n *= 2 {
+		bg, fg := blkPropMap[n].bg, blkPropMap[n].fg
+		for x := 0; x < blockHeight; x++ {
+			for y := 0; y < blockWidth; y++ {
+				s.SetContent(ay+y, ax+x, ' ', nil, bg)
+			}
+		}
+		drawNumber(n, ax, ay+blkPropMap[n].inBlockPad, s, fg)
+		ay += blockWidth
+		if n == 128 {
+			ax += blockHeight
+			ay = 0
+		}
+	}
+	s.Show()
+}
+
 func testDrawBoxedNumber(s tcell.Screen) {
 	fg := tcell.StyleDefault
 	bg := tcell.StyleDefault.Reverse(true)

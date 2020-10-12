@@ -2,16 +2,22 @@ package termi
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cicovic-andrija/2048/core"
 	"github.com/gdamore/tcell"
 )
 
-type State int
+type header struct {
+	text  string
+	width int
+	style tcell.Style
+}
 
 type TermGame struct {
 	game *core.Game
 
+	header *header
 	board  *board
 	screen tcell.Screen
 
@@ -35,9 +41,12 @@ func NewTermGame(game *core.Game, tlx int, tly int) (*TermGame, error) {
 	screen.DisableMouse()
 	screen.SetStyle(whiteOnBlackDefault)
 
+	board := newBoard(game, tlx+2, tly, screen)
+
 	termGame := &TermGame{
 		game:   game,
-		board:  newBoard(game, tlx+2, tly, screen),
+		header: &header{width: board.width, style: whiteOnBlackDefault},
+		board:  board,
 		screen: screen,
 		refx:   tlx,
 		refy:   tly,
@@ -45,15 +54,42 @@ func NewTermGame(game *core.Game, tlx int, tly int) (*TermGame, error) {
 	return termGame, nil
 }
 
+func (t *TermGame) updateHeader(outcome core.Outcome) {
+	switch outcome {
+	case core.Continue:
+		t.header.text = fmt.Sprintf(
+			"%s\nScore: %d | Undos %d",
+			t.game.Player, t.game.Score(), t.game.UndosLeft(),
+		)
+	case core.GameOverWin:
+		t.header.text = fmt.Sprintf("%s WINS!\nScore: %d", t.game.Player, t.game.Score())
+		t.header.style = whiteOnGreen
+	case core.GameOver:
+		t.header.text = "GAME OVER!\nScore: 0"
+		t.header.style = whiteOnRed
+	}
+
+	t.redrawHeader()
+}
+
 func (t *TermGame) redrawHeader() {
-	drawString(
-		fmt.Sprintf("%s", t.game.Player),
-		0, 0, t.screen, whiteOnBlackDefault,
-	)
-	drawString(
-		fmt.Sprintf("Score: %d | Undos: %d", t.game.Score(), t.game.UndosLeft),
-		1, 0, t.screen, whiteOnBlackDefault,
-	)
+	for i, str := range strings.Split(t.header.text, "\n") {
+		drawRect(t.header.width, 1, i, 0, t.screen, t.header.style)
+		drawString(str, i, 0, t.screen, t.header.style)
+	}
+}
+
+func (t *TermGame) waitEsc() {
+	for {
+		switch ev := t.screen.PollEvent().(type) {
+		case *tcell.EventResize:
+			t.redrawComponents()
+		case *tcell.EventKey:
+			if ev.Key() == tcell.KeyEscape {
+				return
+			}
+		}
+	}
 }
 
 func (t *TermGame) redrawComponents() {
@@ -62,15 +98,19 @@ func (t *TermGame) redrawComponents() {
 	t.screen.Sync()
 }
 
-func (t *TermGame) Run() {
+func (t *TermGame) Run() error {
 	if t.game.Phase != core.NotStarted {
-		return
+		return fmt.Errorf("terminal game has already started")
 	}
 
 	t.redrawComponents()
 
 	// event loop
-	for outcome := core.Continue; outcome == core.Continue; {
+	outcome := core.Continue
+	for outcome == core.Continue {
+		t.updateHeader(outcome)
+		t.screen.Show()
+
 		switch ev := t.screen.PollEvent().(type) {
 
 		case *tcell.EventResize:
@@ -93,15 +133,12 @@ func (t *TermGame) Run() {
 				t.board.undo()
 			}
 		}
-
-		switch outcome {
-		case core.Continue:
-			t.redrawHeader()
-			t.screen.Show()
-		case core.GameOver:
-			t.screen.Fini()
-		case core.GameOverWin:
-			t.screen.Fini()
-		}
 	}
+
+	t.updateHeader(outcome)
+	t.screen.Show()
+	t.waitEsc()
+
+	t.screen.Fini()
+	return nil
 }

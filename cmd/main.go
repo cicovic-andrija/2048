@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/cicovic-andrija/2048/termi"
 	"github.com/cicovic-andrija/2048/texti"
@@ -24,9 +25,9 @@ var (
 
 func init() {
 	flag.BoolVar(&local, "local", true, "Local game")
-	flag.BoolVar(&hosted, "hosted", false, "Hosted game (overrides --local)")
-	flag.BoolVar(&terminterface, "termi", true, "Terminal graphics")
-	flag.BoolVar(&textinterface, "texti", false, "Text interface (overrides --terminterface)")
+	flag.BoolVar(&hosted, "hosted", false, "Hosted game (overrides -local)")
+	flag.BoolVar(&terminterface, "terminterface", true, "Terminal graphics")
+	flag.BoolVar(&textinterface, "textinterface", false, "Text interface (overrides -terminterface)")
 	flag.StringVar(&player, "player", "Player", "Player's `name`")
 	flag.IntVar(&size, "size", 4, "Board size: 4 (classic), 5 or 6")
 	flag.IntVar(&target, "target", 2048, "End-game `block`: 2048, 4096 or 8192")
@@ -49,11 +50,17 @@ func main() {
 	parseCmdline()
 
 	if local && textinterface {
-		texti.NewTextGame(player, size, target, undos)
+		if err := texti.NewTextGame(player, size, target, undos); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if local && terminterface {
-		termi.NewTerminalGraphicsGame(player, size, target, undos)
+		if err := termi.NewTerminalGraphicsGame(player, size, target, undos); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if hosted {

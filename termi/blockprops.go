@@ -11,12 +11,12 @@ type blockProps struct {
 var blkPropMap = map[int]blockProps{
 	2: blockProps{
 		inBlockPad: 6,
-		bg:         tcell.StyleDefault.Background(colorAlmostWhite),
+		bg:         tcell.StyleDefault.Background(colorEggShellWhite),
 		fg:         tcell.StyleDefault.Background(colorDarkGray),
 	},
 	4: blockProps{
 		inBlockPad: 6,
-		bg:         tcell.StyleDefault.Background(tcell.Color229),
+		bg:         tcell.StyleDefault.Background(tcell.Color230),
 		fg:         tcell.StyleDefault.Background(colorDarkGray),
 	},
 
@@ -47,43 +47,43 @@ var blkPropMap = map[int]blockProps{
 
 	128: blockProps{
 		inBlockPad: 1,
-		bg:         tcell.StyleDefault.Background(tcell.Color229),
+		bg:         tcell.StyleDefault.Background(tcell.Color228),
 		fg:         tcell.StyleDefault.Background(tcell.ColorWhite),
 	},
 
 	256: blockProps{
 		inBlockPad: 1,
-		bg:         tcell.StyleDefault.Background(tcell.Color229),
+		bg:         tcell.StyleDefault.Background(tcell.Color227),
 		fg:         tcell.StyleDefault.Background(tcell.ColorWhite),
 	},
 
 	512: blockProps{
 		inBlockPad: 1,
-		bg:         tcell.StyleDefault,
+		bg:         tcell.StyleDefault.Background(tcell.Color226),
 		fg:         tcell.StyleDefault.Background(tcell.ColorWhite),
 	},
 
 	1024: blockProps{
 		inBlockPad: 0,
-		bg:         tcell.StyleDefault,
+		bg:         tcell.StyleDefault.Background(tcell.Color221),
 		fg:         tcell.StyleDefault.Background(tcell.ColorWhite),
 	},
 
 	2048: blockProps{
 		inBlockPad: 0,
-		bg:         tcell.StyleDefault,
+		bg:         tcell.StyleDefault.Background(tcell.Color220),
 		fg:         tcell.StyleDefault.Background(tcell.ColorWhite),
 	},
 
 	4096: blockProps{
 		inBlockPad: 0,
-		bg:         tcell.StyleDefault,
+		bg:         tcell.StyleDefault.Background(tcell.Color212),
 		fg:         tcell.StyleDefault.Background(tcell.ColorWhite),
 	},
 
 	8192: blockProps{
 		inBlockPad: 0,
-		bg:         tcell.StyleDefault,
+		bg:         tcell.StyleDefault.Background(tcell.Color211),
 		fg:         tcell.StyleDefault.Background(tcell.ColorWhite),
 	},
 }

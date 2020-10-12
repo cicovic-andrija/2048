@@ -17,8 +17,8 @@ const (
 type board struct {
 	game *core.Game
 
-	boardWidth  int
-	boardHeight int
+	width  int
+	height int
 
 	// absolute coordinates of some top-left reference point
 	refx int
@@ -30,18 +30,18 @@ type board struct {
 
 func newBoard(game *core.Game, tlx int, tly int, screen tcell.Screen) *board {
 	return &board{
-		game:        game,
-		boardWidth:  game.Size*(blockWidth+horizontalBlockGap) + horizontalBlockGap,
-		boardHeight: game.Size*(blockHeight+verticalBlockGap) + verticalBlockGap,
-		refx:        tlx,
-		refy:        tly,
-		screen:      screen,
-		bg:          tcell.StyleDefault.Background(colorGray),
+		game:   game,
+		width:  game.Size*(blockWidth+horizontalBlockGap) + horizontalBlockGap,
+		height: game.Size*(blockHeight+verticalBlockGap) + verticalBlockGap,
+		refx:   tlx,
+		refy:   tly,
+		screen: screen,
+		bg:     tcell.StyleDefault.Background(colorGray),
 	}
 }
 
 func (b *board) redraw() {
-	drawRect(b.boardWidth, b.boardHeight, b.refx, b.refy, b.screen, b.bg)
+	drawRect(b.width, b.height, b.refx, b.refy, b.screen, b.bg)
 	for i := 0; i < b.game.Size; i++ {
 		for j := 0; j < b.game.Size; j++ {
 			x := b.refx + verticalBlockGap + i*(blockHeight+verticalBlockGap)
@@ -49,7 +49,7 @@ func (b *board) redraw() {
 			if val := b.game.Block(i, j); val != 0 {
 				drawRect(blockWidth, blockHeight, x, y, b.screen, blkPropMap[val].bg)
 				drawNumber(val, x, y+blkPropMap[val].inBlockPad, b.screen, blkPropMap[val].fg)
-			} else {
+			} else { // empty block
 				drawRect(blockWidth, blockHeight, x, y, b.screen, emptyCellStyle)
 			}
 		}

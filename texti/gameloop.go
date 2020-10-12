@@ -30,7 +30,7 @@ func drawBoard(g *core.Game) {
 	}
 
 	var str strings.Builder
-	str.WriteString(fmt.Sprintf(textiScoreLineFmt, g.Score(), g.UndosLeft))
+	str.WriteString(fmt.Sprintf(textiScoreLineFmt, g.Score(), g.UndosLeft()))
 	str.WriteString(textiHorizLine)
 	for i := 0; i < g.Size; i++ {
 		for j := 0; j < g.Size; j++ {
@@ -42,11 +42,10 @@ func drawBoard(g *core.Game) {
 	fmt.Print(str.String())
 }
 
-func NewTextGame(player string, size int, target int, undos int) {
+func NewTextGame(player string, size int, target int, undos int) error {
 	game, err := core.NewGame(player, size, target, undos)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error in game initialization: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error in game initialization: %v", err)
 	}
 
 	buildTextiParts(player, size)
@@ -54,7 +53,7 @@ func NewTextGame(player string, size int, target int, undos int) {
 	reader := bufio.NewReader(os.Stdin)
 	outcome := core.Continue
 
-	fmt.Println("Controls: 'w' (Up), 'a' (Left), 'd' (Right), 's' (Down), 'q' (Quit)")
+	fmt.Println("Controls: 'w' (Up) / 'a' (Left) / 'd' (Right) / 's' (Down) / 'u' (Undo) / 'q' (Quit)")
 	drawBoard(game)
 	for outcome == core.Continue {
 
@@ -81,18 +80,24 @@ func NewTextGame(player string, size int, target int, undos int) {
 			drawBoard(game)
 		case 'u', 'U':
 			if ok := game.Undo(); !ok {
-				fmt.Printf("Can't undo: no undos left or second undo in a row.\n")
+				fmt.Println("Can't undo: no undos left / second undo in a row / first move.")
 				break
 			}
 			drawBoard(game)
-		case 'e', 'E', 'q', 'Q':
+		case 'q', 'Q':
 			outcome = core.GameOver
+		case '\n', '\r':
+			// ignore
+		default:
+			fmt.Println("Invalid command.")
 		}
 	}
 
 	if outcome == core.GameOverWin {
-		fmt.Printf("\n%s WINS!\nScore: %d\n", game.Player, game.Score())
+		fmt.Printf("===\n%s WINS! Score: %d\n===\n", game.Player, game.Score())
 	} else {
-		fmt.Printf("\nScore: 0\nGAME OVER!\n")
+		fmt.Printf("===\nGAME OVER! Score: 0\n===\n")
 	}
+
+	return nil
 }

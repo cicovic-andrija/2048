@@ -19,7 +19,7 @@ const (
 	MaxBlock       = 8192
 	MaxBlockDigits = 4
 
-	MinTarget = 2048
+	MinTarget = 64
 	MaxTarget = MaxBlock
 
 	blockFourProbability float64 = 0.15
@@ -93,7 +93,7 @@ type Game struct {
 	scratchState    *stableState // scratch state
 
 	canUndo       bool
-	UndosLeft     int
+	undosLeft     int
 	anyBlockMoved bool
 	rng           *rand.Rand // random number generator
 }
@@ -137,7 +137,7 @@ func NewGame(player string, size int, target int, undos int) (*Game, error) {
 		prevStableState: newInitialState(size),
 		scratchState:    newInitialState(size),
 		canUndo:         false,
-		UndosLeft:       undos,
+		undosLeft:       undos,
 		anyBlockMoved:   false,
 		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
@@ -223,21 +223,21 @@ func (g *Game) calcOutcome() Outcome {
 }
 
 func (g *Game) copyToPrevState() {
-	if g.UndosLeft == 0 {
+	if g.undosLeft == 0 {
 		return
 	}
 	g.prevStableState.deepCopyFrom(&g.stableState)
 }
 
 func (g *Game) rollbackPrevState() {
-	if g.UndosLeft == 0 {
+	if g.undosLeft == 0 {
 		return
 	}
 	g.prevStableState.deepCopyFrom(g.scratchState)
 }
 
 func (g *Game) commitPrevState() {
-	if g.UndosLeft == 0 {
+	if g.undosLeft == 0 {
 		return
 	}
 	g.scratchState.deepCopyFrom(g.prevStableState)
@@ -466,17 +466,21 @@ func (g *Game) Push(dir Direction) Outcome {
 }
 
 func (g *Game) Undo() bool {
-	if g.Phase == Finished || g.UndosLeft == 0 || !g.canUndo {
+	if g.Phase == Finished || g.undosLeft == 0 || !g.canUndo {
 		return false
 	}
 	g.stableState.deepCopyFrom(g.prevStableState)
-	g.UndosLeft--
+	g.undosLeft--
 	g.canUndo = false // two consecutive undos are not allowed
 	return true
 }
 
 func (g *Game) Score() int {
 	return g.score
+}
+
+func (g *Game) UndosLeft() int {
+	return g.undosLeft
 }
 
 func (g *Game) Block(i int, j int) int {
