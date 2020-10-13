@@ -32,6 +32,10 @@ var (
 				Background(tcell.ColorBlack).
 				Foreground(tcell.ColorWhite)
 
+	whiteOnBlue = tcell.StyleDefault.
+			Background(tcell.ColorBlue).
+			Foreground(tcell.ColorWhite)
+
 	whiteOnGreen = tcell.StyleDefault.
 			Background(tcell.ColorGreen).
 			Foreground(tcell.ColorWhite)

@@ -43,9 +43,15 @@ func NewTermGame(game *core.Game, tlx int, tly int) (*TermGame, error) {
 
 	board := newBoard(game, tlx+2, tly, screen)
 
+	header := &header{
+		text:  "NEW GAME\nUse arrow keys to play / Ctrl+U to undo / Esc to quit",
+		width: board.width,
+		style: whiteOnGreen,
+	}
+
 	termGame := &TermGame{
 		game:   game,
-		header: &header{width: board.width, style: whiteOnBlackDefault},
+		header: header,
 		board:  board,
 		screen: screen,
 		refx:   tlx,
@@ -58,24 +64,31 @@ func (t *TermGame) updateHeader(outcome core.Outcome) {
 	switch outcome {
 	case core.Continue:
 		t.header.text = fmt.Sprintf(
-			"%s\nScore: %d | Undos %d",
+			"%s\nScore: %d / Undos %d",
 			t.game.Player, t.game.Score(), t.game.UndosLeft(),
 		)
+		t.header.style = whiteOnBlue
 	case core.GameOverWin:
-		t.header.text = fmt.Sprintf("%s WINS!\nScore: %d", t.game.Player, t.game.Score())
+		t.header.text = fmt.Sprintf("%s WINS! Score: %d\nPress Esc to exit", t.game.Player, t.game.Score())
 		t.header.style = whiteOnGreen
 	case core.GameOver:
-		t.header.text = "GAME OVER!\nScore: 0"
+		t.header.text = "GAME OVER! Score: 0\nPress Esc to exit"
 		t.header.style = whiteOnRed
 	}
 
 	t.redrawHeader()
 }
 
+func (t *TermGame) promptConfirmQuit() {
+	t.header.text = "Are you sure you want to quit?\nConfirm by pressing Esc or press any other key to continue"
+	t.header.style = whiteOnRed
+	t.redrawHeader()
+}
+
 func (t *TermGame) redrawHeader() {
 	for i, str := range strings.Split(t.header.text, "\n") {
-		drawRect(t.header.width, 1, i, 0, t.screen, t.header.style)
-		drawString(str, i, 0, t.screen, t.header.style)
+		drawRect(t.header.width, 1 /* height */, t.refx+i, t.refy, t.screen, t.header.style)
+		drawString(str, t.refx+i, t.refy, t.screen, t.header.style)
 	}
 }
 
@@ -99,6 +112,11 @@ func (t *TermGame) redrawComponents() {
 }
 
 func (t *TermGame) Run() error {
+	var (
+		outcome       = core.Continue
+		quitRequested = false
+	)
+
 	if t.game.Phase != core.NotStarted {
 		return fmt.Errorf("terminal game has already started")
 	}
@@ -106,13 +124,8 @@ func (t *TermGame) Run() error {
 	t.redrawComponents()
 
 	// event loop
-	outcome := core.Continue
 	for outcome == core.Continue {
-		t.updateHeader(outcome)
-		t.screen.Show()
-
 		switch ev := t.screen.PollEvent().(type) {
-
 		case *tcell.EventResize:
 			t.redrawComponents()
 			continue
@@ -120,7 +133,14 @@ func (t *TermGame) Run() error {
 		case *tcell.EventKey:
 			switch ev.Key() {
 			case tcell.KeyEscape:
-				outcome = core.GameOver
+				if quitRequested {
+					outcome = core.GameOver
+				} else { // ask for second Esc to quit
+					quitRequested = true
+					t.promptConfirmQuit()
+					t.screen.Show()
+					continue
+				}
 			case tcell.KeyRight:
 				outcome = t.board.push(core.Right)
 			case tcell.KeyLeft:
@@ -132,13 +152,14 @@ func (t *TermGame) Run() error {
 			case tcell.KeyCtrlU:
 				t.board.undo()
 			}
+
+			t.updateHeader(outcome)
+			t.screen.Show()
+			quitRequested = false
 		}
 	}
 
-	t.updateHeader(outcome)
-	t.screen.Show()
 	t.waitEsc()
-
 	t.screen.Fini()
 	return nil
 }
